@@ -24,6 +24,56 @@ app.add_middleware(
 class BudgetRequest(BaseModel):
     prompt: str  # User's budget input (e.g., "I earn $5000 and spend $2000 on rent")
 
+# Define Request Model for Form Input
+class BudgetFormRequest(BaseModel):
+    income: float
+    expenses: list[dict]  # Example: [{"category": "Rent", "amount": 1500}, ...]
+    concerns: str = ""  # Optional financial concerns
+
+@app.post("/generate_budget_from_form")
+async def generate_budget_from_form(request: BudgetFormRequest):
+    """Processes structured budget data from the form, generates an AI-enhanced budget, and saves an Excel file."""
+    
+    # Convert form input into a prompt format for AI pipeline
+    user_input = f"My monthly income is ${request.income}. "
+    
+    if request.expenses:
+        user_input += "I have the following expenses: "
+        user_input += ", ".join([f"{exp['category']} (${exp['amount']})" for exp in request.expenses]) + ". "
+
+    if request.concerns:
+        user_input += f"My financial concerns are: {request.concerns}. "
+
+    # Send structured input to AI pipeline
+    budget_data = run_budget_pipeline(user_input)
+
+    # Handle errors from AI pipeline
+    if "error" in budget_data:
+        return {"error": budget_data["error"]}
+
+    # Convert structured JSON to DataFrame
+    df = pd.DataFrame(budget_data["expenses"])
+
+    # Add Income and Savings Summary
+    income_row = pd.DataFrame([{"category": "Income", "amount": budget_data["income"]}])
+    savings_row = pd.DataFrame([{"category": "Recommended Savings", "amount": budget_data["savings"]}])
+    df = pd.concat([income_row, df, savings_row], ignore_index=True)
+
+    # Ensure "budgets/" folder exists
+    os.makedirs("budgets", exist_ok=True)
+
+    # Generate Unique Filename (e.g., budgets/budget_abc123.xlsx)
+    unique_filename = f"budget_{uuid.uuid4().hex}.xlsx"
+    file_path = os.path.join("budgets", unique_filename)
+
+    # Save the file
+    df.to_excel(file_path, index=False)
+
+    return {
+        "budget": budget_data,
+        "excel_url": f"/download/{unique_filename}"  # Return unique file path
+    }
+
 @app.post("/generate_budget")
 async def generate_budget(request: BudgetRequest):
     """Processes user input, generates structured budget JSON, and saves an Excel file."""
