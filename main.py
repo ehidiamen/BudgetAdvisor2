@@ -1,10 +1,14 @@
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from vosk import Model, KaldiRecognizer
+import wave
 import pandas as pd
 import os
+import json
+import requests
 import uuid  # Import UUID for unique filenames
 from langchain_pipeline import run_budget_pipeline
 
@@ -15,11 +19,17 @@ app = FastAPI()
 # Enable CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change for production
+    allow_origins=["http://localhost:3000"],  # Change for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Deepgram API Key (Load from Environment Variable)
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+if not DEEPGRAM_API_KEY:
+    raise Exception("⚠️ Deepgram API Key is missing! Set DEEPGRAM_API_KEY in your environment variables.")
 
 class BudgetRequest(BaseModel):
     prompt: str  # User's budget input (e.g., "I earn $5000 and spend $2000 on rent")
@@ -30,11 +40,44 @@ class BudgetFormRequest(BaseModel):
     expenses: list[dict]  # Example: [{"category": "Rent", "amount": 1500}, ...]
     concerns: str = ""  # Optional financial concerns
 
+
+@app.post("/transcribe_audio")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """
+    Receives an audio file and sends it to Deepgram for transcription.
+    Returns the transcribed text.
+    """
+
+    # Read the uploaded file into memory
+    audio_bytes = await file.read()
+
+    # Deepgram API URL
+    url = "https://api.deepgram.com/v1/listen"
+
+    # Headers for Deepgram API
+    headers = {
+        "Authorization": f"Token {DEEPGRAM_API_KEY}",
+        "Content-Type": file.content_type,  # Automatically detects file type
+    }
+
+    # Send Audio to Deepgram
+    response = requests.post(url, headers=headers, data=audio_bytes)
+
+    # Check for errors
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=f"Deepgram Error: {response.json()}")
+
+    # Extract Transcription
+    transcript_data = response.json()
+    transcript_text = transcript_data.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+
+    return {"transcription": transcript_text}
+
 @app.post("/generate_budget_from_form")
 async def generate_budget_from_form(request: BudgetFormRequest):
     """Processes structured budget data from the form, generates an AI-enhanced budget, and saves an Excel file."""
     
-    # Convert form input into a prompt format for AI pipeline
+    # ✅ Convert form input into a prompt format for AI pipeline
     user_input = f"My monthly income is ${request.income}. "
     
     if request.expenses:
