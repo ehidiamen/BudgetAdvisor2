@@ -77,7 +77,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
 async def generate_budget_from_form(request: BudgetFormRequest):
     """Processes structured budget data from the form, generates an AI-enhanced budget, and saves an Excel file."""
     
-    # ✅ Convert form input into a prompt format for AI pipeline
+    # Convert form input into a prompt format for AI pipeline
     user_input = f"My monthly income is ${request.income}. "
     
     if request.expenses:
