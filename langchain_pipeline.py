@@ -5,10 +5,10 @@ from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.schema.runnable import RunnableParallel
 
-# ✅ Load environment variables (API keys)
+# Load environment variables (API keys)
 load_dotenv()
 
-# ✅ Initialize AI model (Groq Llama3)
+# Initialize AI model (Groq Llama3)
 llm = ChatGroq(
     model="llama3-8b-8192",
     temperature=0.1,  # More deterministic output
@@ -16,25 +16,25 @@ llm = ChatGroq(
     max_retries=2  
 )
 
-# ✅ Function to clean AI response & extract JSON
+# Function to clean AI response & extract JSON
 def extract_json(text):
     """Extracts valid JSON from AI response, handling both objects `{}` and lists `[]`."""
     try:
-        # ✅ Directly parse if already valid JSON
+        # Directly parse if already valid JSON
         parsed_data = json.loads(text)
-        return parsed_data  # ✅ Return parsed JSON directly
+        return parsed_data  # Return parsed JSON directly
     except json.JSONDecodeError:
-        # ✅ Handle cases where AI wraps JSON in extra text
+        # Handle cases where AI wraps JSON in extra text
         match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
         if match:
             try:
-                return json.loads(match.group())  # ✅ Extract and parse valid JSON
+                return json.loads(match.group())  # Extract and parse valid JSON
             except json.JSONDecodeError:
                 pass  # Continue to final error return
 
     return {"error": "Invalid JSON format from AI.", "raw_response": text}
 
-# ✅ AI Prompt for Budget Breakdown (CSV)
+# AI Prompt for Budget Breakdown (CSV)
 csv_prompt = ChatPromptTemplate.from_messages([
     ("system", """You are a financial expert. Convert user input into CSV format:
         Category,Item,Amount
@@ -45,7 +45,7 @@ csv_prompt = ChatPromptTemplate.from_messages([
     ("human", "{user_input}"),
 ])
 
-# ✅ AI Prompt for Financial Advice
+# AI Prompt for Financial Advice
 advice_prompt = PromptTemplate(
     template="""Based on this situation: {user_input},  
         provide clear, actionable financial advice.  
@@ -57,10 +57,10 @@ advice_prompt = PromptTemplate(
     input_variables=["user_input"],
 )
 
-# ✅ Chain for parallel execution of CSV & Advice
+# Chain for parallel execution of CSV & Advice
 csv_advice_chain = RunnableParallel(csv=csv_prompt | llm, advice=advice_prompt | llm)
 
-# ✅ Function to run AI-generated budget & advice
+# Function to run AI-generated budget & advice
 def financial_planner(user_input: str):
     if not user_input.strip():
         return {"error": "Please provide financial details."}
@@ -71,7 +71,7 @@ def financial_planner(user_input: str):
 
 # =========================== JSON-Based Data Extraction =========================== #
 
-# ✅ AI Prompts for Extracting Income, Expenses, Concerns, and Advice
+# AI Prompts for Extracting Income, Expenses, Concerns, and Advice
 income_prompt = PromptTemplate.from_template(
     "From this input: {input}, extract ONLY income sources.\n"
     "Respond ONLY in JSON: [{{\"source\": \"...\", \"amount\": ...}}]"
@@ -90,13 +90,13 @@ advice_prompt = PromptTemplate.from_template(
     "Based on this situation: {input}, provide actionable financial advice."
 )
 
-# ✅ Chains for processing income, expenses, concerns, and advice
+# Chains for processing income, expenses, concerns, and advice
 income_chain = income_prompt | llm
 expenses_chain = expenses_prompt | llm
 concerns_chain = concerns_prompt | llm
 advice_chain = advice_prompt | llm
 
-# ✅ Optimized Parallel Execution Chain
+# Optimized Parallel Execution Chain
 budget_parallel_chain = RunnableParallel(
     income=income_chain,
     expenses=expenses_chain,
@@ -104,21 +104,21 @@ budget_parallel_chain = RunnableParallel(
     advice=advice_chain,
 )
 
-# ✅ Savings Recommendation System
+# Savings Recommendation System
 def calculate_savings(income, expenses):
     """Suggests savings based on income and total expenses."""
     total_expenses = sum(item["amount"] for item in expenses)
     suggested_savings = income - total_expenses
     return max(suggested_savings, 0)  # Ensure savings is not negative
 
-# ✅ Function to Run Full Budget Analysis
+# Function to Run Full Budget Analysis
 def run_budget_pipeline(user_input):
     if not user_input.strip():
         return {"error": "Please provide financial details."}
 
     extracted_data = budget_parallel_chain.invoke({"input": user_input})
     
-    # ✅ Validate & Parse JSON Responses
+    # Validate & Parse JSON Responses
     income_data = extract_json(extracted_data["income"].content)
     expenses_data = extract_json(extracted_data["expenses"].content)
     
@@ -127,7 +127,7 @@ def run_budget_pipeline(user_input):
         print(expenses_data)
         return {"error": "AI returned invalid financial data."}
 
-    # ✅ Convert extracted values to structured format
+    # Convert extracted values to structured format
     total_income = sum(item["amount"] for item in income_data)
     total_expenses = expenses_data if isinstance(expenses_data, list) else []
     recommended_savings = calculate_savings(total_income, total_expenses)
